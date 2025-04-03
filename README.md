@@ -11,11 +11,36 @@ A tool for benchmarking Google Cloud Spanner performance.
 - Easy instance creation and testing setup
 - Automated dual-region testing
 
+## Prerequisites
+
+- Go 1.19 or later
+- Google Cloud SDK
+- Authenticated gcloud session
+- Project with Spanner API enabled
+- Permission to create Spanner instances
+
 ## Installation
 
+There are two ways to install GCSB:
+
+### Option 1: Install from source (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/cloudspannerecosystem/gcsb.git
+cd gcsb
+
+# Build the binary
+go build -o gcsb
+
+# Verify the installation
+./gcsb --help
+```
+
+### Option 2: Install using go install (Advanced)
 ```bash
 go install github.com/cloudspannerecosystem/gcsb@latest
 ```
+Note: If using `go install`, you'll need to update the paths in the test scripts to use the full path to your GCSB binary (usually in `$GOPATH/bin/gcsb`).
 
 ## Quick Start
 
@@ -31,7 +56,12 @@ gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
 ```
 
-2. Create test instances using the provided script:
+2. Build the GCSB binary (if not already done):
+```bash
+go build -o gcsb
+```
+
+3. Create test instances using the provided script:
 ```bash
 chmod +x create_test_instances.sh
 ./create_test_instances.sh
@@ -54,6 +84,10 @@ Available configurations include:
 For testing dual-region configurations with Enterprise Plus edition:
 
 ```bash
+# First, make sure you've built the binary (if not already done)
+go build -o gcsb
+
+# Then run the test script
 chmod +x run_dual_region_test.sh
 ./run_dual_region_test.sh
 ```
@@ -72,50 +106,25 @@ The test configuration includes:
 - 100% write operations
 - Large string fields to help reach target data size
 
-2. Create a configuration file (test.yaml):
-```yaml
-project: your-project-id
-instance: your-instance-id
-database: your-database-id
+## Troubleshooting
 
-# Schema definition
-schema: |
-  CREATE TABLE TestTable (
-    ID STRING(36) NOT NULL,
-    Name STRING(MAX),
-    Value INT64,
-  ) PRIMARY KEY (ID)
+Common issues and solutions:
 
-# Workload configuration
-workload:
-  threads: 4
-  operations: 1000
-  commitDelay: 100ms  # Enable commit delay optimization
+1. "cannot execute binary file: Exec format error"
+   - Make sure you've built the binary for your system using `go build -o gcsb`
+   - If using `go install`, update the script to use the full path to your GCSB binary (usually in `$GOPATH/bin/gcsb`)
 
-  # Table configuration
-  tables:
-    - name: TestTable
-      writeRatio: 1.0
-      readRatio: 0.0
-      rowCount: 1000
+2. "Permission denied" when running scripts
+   - Make sure the scripts are executable: `chmod +x *.sh`
 
-  # Data generation
-  data:
-    - column: ID
-      type: uuid
-    - column: Name
-      type: string
-      length: 100
-    - column: Value
-      type: int
-      min: 1
-      max: 1000
-```
+3. "Project not found" or "Permission denied" for Spanner operations
+   - Verify your gcloud authentication: `gcloud auth login`
+   - Check your project ID: `gcloud config get-value project`
+   - Ensure you have the necessary Spanner permissions
 
-3. Run the benchmark:
-```bash
-gcsb --config test.yaml
-```
+4. "Instance already exists" error
+   - The script will automatically use existing instances if they match the naming pattern
+   - To create a new instance, either delete the existing one or modify the instance name in the script
 
 ## Configuration Options
 
