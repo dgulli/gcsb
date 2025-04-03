@@ -9,6 +9,7 @@ A tool for benchmarking Google Cloud Spanner performance.
 - Real-time metrics and reporting
 - Commit delay optimization support
 - Easy instance creation and testing setup
+- Automated dual-region testing
 
 ## Installation
 
@@ -47,6 +48,29 @@ Available configurations include:
 - Multi-region (nam3)
 - Dual-region (australia-southeast1+australia-southeast2)
 - Both STANDARD and ENTERPRISE versions
+
+### Dual-Region Testing
+
+For testing dual-region configurations with Enterprise Plus edition:
+
+```bash
+chmod +x run_dual_region_test.sh
+./run_dual_region_test.sh
+```
+
+This script will:
+- Create an Enterprise Plus instance in dual-region configuration
+- Create a database with test schema
+- Load initial test data
+- Run a benchmark with commit delay optimization
+- Save results to a timestamped file
+
+The test configuration includes:
+- 4 concurrent threads
+- 100,000 operations (~5GB of data)
+- 100ms commit delay
+- 100% write operations
+- Large string fields to help reach target data size
 
 2. Create a configuration file (test.yaml):
 ```yaml
