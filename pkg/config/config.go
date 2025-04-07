@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -77,6 +78,9 @@ func NewConfig(v *viper.Viper) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Log the commit delay value from configuration
+	log.Printf("Configuration commit delay: %v", c.CommitDelay)
 
 	return &c, nil
 }

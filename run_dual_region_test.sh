@@ -12,6 +12,24 @@ if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q
     exit 1
 fi
 
+# Check if yq is installed
+if ! command -v yq &> /dev/null; then
+    echo "yq is not installed. Installing yq..."
+    # For macOS
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if ! command -v brew &> /dev/null; then
+            echo "Homebrew is not installed. Please install Homebrew first:"
+            echo "/bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            exit 1
+        fi
+        brew install yq
+    # For Linux
+    else
+        sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+        sudo chmod a+x /usr/local/bin/yq
+    fi
+fi
+
 # Get project ID
 PROJECT_ID=$(gcloud config get-value project)
 if [ -z "$PROJECT_ID" ]; then
@@ -21,9 +39,6 @@ if [ -z "$PROJECT_ID" ]; then
 fi
 
 echo "Using project: $PROJECT_ID"
-
-# Update the YAML file with the current project ID
-sed -i '' "s/project: your-project-id/project: $PROJECT_ID/" dual_region_test.yaml
 
 # Create the dual-region instance with a valid name
 echo "Creating instance..."
@@ -57,25 +72,64 @@ else
         --database-dialect=GOOGLE_STANDARD_SQL \
         --project=$PROJECT_ID
 
+    # Extract and validate schema
+    echo "Extracting schema from YAML..."
+    SCHEMA_DDL=$(yq '.schema' dual_region_test.yaml)
+    if [ -z "$SCHEMA_DDL" ]; then
+        echo "Error: Could not extract schema from YAML file"
+        exit 1
+    fi
+
+    # Validate schema syntax
+    echo "Validating schema syntax..."
+    if ! echo "$SCHEMA_DDL" | grep -q "CREATE TABLE"; then
+        echo "Error: Invalid schema - no CREATE TABLE statements found"
+        exit 1
+    fi
+
     # Apply the schema
     echo "Applying schema..."
-    SCHEMA_DDL=$(grep -A 1000 'schema: |' dual_region_test.yaml | tail -n +2 | sed 's/^  //' | sed '/^workload:/q' | sed '$d')
-    gcloud spanner databases ddl update $DB_NAME \
+    if ! gcloud spanner databases ddl update $DB_NAME \
         --instance=$INSTANCE_NAME \
         --ddl="$SCHEMA_DDL" \
-        --project=$PROJECT_ID
+        --project=$PROJECT_ID; then
+        echo "Error: Failed to apply schema"
+        exit 1
+    fi
+fi
+
+# Update the YAML file with the correct instance and database names
+echo "Updating YAML configuration..."
+yq -i ".instance = \"$INSTANCE_NAME\"" dual_region_test.yaml
+yq -i ".database = \"$DB_NAME\"" dual_region_test.yaml
+yq -i ".project = \"$PROJECT_ID\"" dual_region_test.yaml
+
+# Verify schema was applied
+echo "Verifying schema..."
+if ! gcloud spanner databases execute-sql $DB_NAME \
+    --instance=$INSTANCE_NAME \
+    --project=$PROJECT_ID \
+    --sql="SELECT * FROM information_schema.tables WHERE table_name = 'TestTable'" | grep -q "TestTable"; then
+    echo "Error: Schema verification failed - TestTable not found"
+    exit 1
 fi
 
 # Run initial data load
 echo "Loading initial data..."
-./gcsb load --config dual_region_test.yaml --project=$PROJECT_ID --instance=$INSTANCE_NAME --database=$DB_NAME -t TestTable
+if ! ./gcsb load --config dual_region_test.yaml -t TestTable; then
+    echo "Error: Failed to load initial data"
+    exit 1
+fi
 
 # Run the benchmark
 echo "Starting benchmark..."
 RESULTS_FILE="benchmark_results_$(date +%Y%m%d_%H%M%S).txt"
-./gcsb run --config dual_region_test.yaml --project=$PROJECT_ID --instance=$INSTANCE_NAME --database=$DB_NAME -t TestTable | tee $RESULTS_FILE
+if ! ./gcsb run --config dual_region_test.yaml -t TestTable | tee $RESULTS_FILE; then
+    echo "Error: Benchmark failed"
+    exit 1
+fi
 
-echo "Test completed!"
+echo "Test completed successfully!"
 echo "Instance: $INSTANCE_NAME"
 echo "Database: $DB_NAME"
 echo "Results saved to: $RESULTS_FILE"

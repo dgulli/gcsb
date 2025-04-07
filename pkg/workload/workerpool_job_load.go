@@ -53,6 +53,9 @@ func (j *WorkerPoolLoadJob) Execute() {
 }
 
 func (j *WorkerPoolLoadJob) InsertMapBatch() {
+	// Log the commit delay value before starting transaction
+	log.Printf("Worker pool starting transaction with commit delay: %v", j.CommitDelay)
+
 	// Create a transaction with commit options
 	commitDelay := j.CommitDelay // Create a local variable to get its address
 	_, err := j.Client.ReadWriteTransactionWithOptions(j.Context,
@@ -80,6 +83,9 @@ func (j *WorkerPoolLoadJob) InsertMapBatch() {
 			},
 		},
 	)
+
+	// Log the commit delay value being used
+	log.Printf("Worker pool transaction completed with commit delay: %v", commitDelay)
 
 	if err != nil {
 		sErr := spanner.ErrCode(err)

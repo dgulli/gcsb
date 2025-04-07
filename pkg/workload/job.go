@@ -101,6 +101,9 @@ func (j *Job) Execute() {
 }
 
 func (j *Job) ReadOne() error {
+	// Log the commit delay value before starting transaction
+	log.Printf("Benchmark read transaction starting with commit delay: %v", j.CommitDelay)
+
 	// Generate read predicate
 	r := j.generateReadKey()
 
@@ -109,6 +112,9 @@ func (j *Job) ReadOne() error {
 
 	// perform read
 	err := j.readRow(tx, r)
+
+	// Log the commit delay value being used
+	log.Printf("Benchmark read transaction completed with commit delay: %v", j.CommitDelay)
 
 	// Check for fatal errors
 	err = j.checkSpannerError(err)
@@ -120,15 +126,25 @@ func (j *Job) ReadOne() error {
  * InsertOne will insert one row into the jobs table
  */
 func (j *Job) InsertOne() error {
+	// Log the commit delay value before starting transaction
+	log.Printf("Benchmark transaction starting with commit delay: %v", j.CommitDelay)
+
 	// Create a map of row data
 	m := j.generateRow()
 
-	// Insert the row using the mutation API
-	err := j.applyMutations(
+	// Insert the row using the mutation API with commit delay
+	_, err := j.Client.Apply(j.Context,
 		[]*spanner.Mutation{
 			spanner.InsertMap(j.Table, m),
 		},
+		spanner.ApplyCommitOptions(spanner.CommitOptions{
+			MaxCommitDelay:    &j.CommitDelay,
+			ReturnCommitStats: true,
+		}),
 	)
+
+	// Log the commit delay value being used
+	log.Printf("Benchmark transaction completed with commit delay: %v", j.CommitDelay)
 
 	// Check if error is fatal. Since we're only performing 1 op,
 	// This is called mostly for it's side effect of collecting
@@ -139,6 +155,9 @@ func (j *Job) InsertOne() error {
 }
 
 func (j *Job) InsertWithCommitDelay() error {
+	// Log the commit delay value before starting transaction
+	log.Printf("Starting transaction with commit delay: %v", j.CommitDelay)
+
 	// Create a transaction with commit options
 	_, err := j.Client.ReadWriteTransactionWithOptions(j.Context,
 		func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
@@ -163,6 +182,9 @@ func (j *Job) InsertWithCommitDelay() error {
 			},
 		},
 	)
+
+	// Log the commit delay value being used
+	log.Printf("Transaction completed with commit delay: %v", j.CommitDelay)
 
 	// Check if error is fatal
 	err = j.checkSpannerError(err)
